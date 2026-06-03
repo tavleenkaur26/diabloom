@@ -86,7 +86,7 @@ def get_feature_importance(model, window, background_data):
     
     return dict(zip(FEATURE_NAMES, mean_importance))
 
-def generate_alert(predicted_glucose, feature_importance, threshold=80):
+def generate_alert(predicted_glucose, feature_importance, threshold=90):
     """
     Converts prediction + SHAP into a human readable alert.
     threshold=80 gives a safety buffer above the clinical 70 hypo line.
