@@ -1,3 +1,7 @@
+#layer1 - trend direcn, rate of change
+#layer2 - trend + time of day/ volatility, meal-like behaviour
+#lstm remembers the exact path that led to currentb glucose, neural network cant do that
+#future glucose depends on history
 
 import torch
 import torch.nn as nn
