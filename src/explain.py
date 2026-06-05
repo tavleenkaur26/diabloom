@@ -1,6 +1,5 @@
-
-# takes a trained model + one glucose window
-# returns plain english explanation of the prediction
+# takes a trained model + one glucose window- returns plain english explanation of the prediction
+# translator b/w lstm brain and human user
 
 import torch
 import numpy as np
@@ -53,7 +52,7 @@ def get_feature_importance(model, window, background_data):
     def model_fn(x_flat):
         x_3d   = x_flat.reshape(-1, 24, 8)
         tensor = torch.tensor(x_3d, dtype=torch.float32)
-        with torch.no_grad():
+        with torch.no_grad(): # no computation of gradients - prediction only, no training
             return model(tensor).numpy()
     
     explainer   = shap.KernelExplainer(model_fn, bg_flat)
@@ -66,7 +65,7 @@ def get_feature_importance(model, window, background_data):
     return dict(zip(FEATURE_NAMES, mean_importance))
     
     # wrap model for SHAP - needs numpy in, numpy out
-    def model_fn(x):
+    def model_fn(x): # past 2hrs -> lstm memory-> detect pattern -> future glucose 
         tensor = torch.tensor(x, dtype=torch.float32)
         with torch.no_grad():
             return model(tensor).numpy()
@@ -74,7 +73,7 @@ def get_feature_importance(model, window, background_data):
     # use a small background sample (50 samples is enough)
     bg = background_data[:50]
     
-    explainer   = shap.KernelExplainer(model_fn, bg)
+    explainer   = shap.KernelExplainer(model_fn, bg) # whyprediction happened
     shap_values = explainer.shap_values(
                     window[np.newaxis, :],   # (1, 24, 8)
                     nsamples=100
@@ -85,6 +84,8 @@ def get_feature_importance(model, window, background_data):
     mean_importance = np.abs(shap_values[0]).mean(axis=0)  # (8,)
     
     return dict(zip(FEATURE_NAMES, mean_importance))
+
+# SHAP - which feature contributes most?
 
 def generate_alert(predicted_glucose, feature_importance, threshold=90):
     """
