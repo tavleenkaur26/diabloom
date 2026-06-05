@@ -87,10 +87,10 @@ def get_feature_importance(model, window, background_data):
 
 # SHAP - which feature contributes most?
 
-def generate_alert(predicted_glucose, feature_importance, threshold=90):
+def generate_alert(predicted_glucose, feature_importance, threshold=95):
     """
     Converts prediction + SHAP into a human readable alert.
-    threshold=80 gives a safety buffer above the clinical 70 hypo line.
+    threshold=95 gives a safety buffer above the clinical 70 hypo line.
     
     returns: alert dict with level, message, explanation
     """

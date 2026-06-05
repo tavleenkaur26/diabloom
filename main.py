@@ -137,7 +137,7 @@ def predict(body: GlucoseReadings):
         importance = get_feature_importance(model, window, BACKGROUND)
         
         # generate alert
-        alert = generate_alert(predicted, importance, threshold=90)
+        alert = generate_alert(predicted, importance, threshold=95)
         
         return PredictionResponse(
             predicted_glucose = alert['predicted_glucose'],
