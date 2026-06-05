@@ -1,6 +1,8 @@
-# src/dataset.py
-# Turns raw D1NAMO CSV files into PyTorch-ready tensors
-# This is the foundation everything else builds on
+# turns raw D1NAMO CSV files into PyTorch-ready tensors
+# load patient -> engineer feaures -> normalise -> create sliding windows -> store tensors
+# factors in 2 hrs - glucose, rate of change, 1hr avg + volatility, time of day 
+# patterns- glucose peaks + morning hrs + high recent avf --> likely to continue going up (hyper)
+
 
 import torch
 from torch.utils.data import Dataset
@@ -8,13 +10,13 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-# ── Constants ────────────────────────────────────────────
+# constants
 BASE_PATH = 'data/raw/d1namo/diabetes_subset_pictures-glucose-food-insulin'
 PATIENTS   = ['001','002','003','004','005','006','007','008','009']
 FEATURES   = ['glucose_norm','delta_1','delta_3','delta_6',
               'rolling_mean_12','rolling_std_12','hour_sin','hour_cos']
 
-# ── Step 1: Load raw CSV ──────────────────────────────────
+# step1: load raw csv
 def load_patient(patient_id):
     path = f'{BASE_PATH}/{patient_id}/glucose.csv'
     df = pd.read_csv(path)
@@ -24,20 +26,20 @@ def load_patient(patient_id):
     df = df[['timestamp','glucose']].sort_values('timestamp').reset_index(drop=True)
     return df
 
-# ── Step 2: Engineer features ─────────────────────────────
+#step2 : engineer features
 def engineer_features(df):
     df = df.copy()
-    df['delta_1']  = df['glucose'].diff()
-    df['delta_3']  = df['glucose'].diff(3)
-    df['delta_6']  = df['glucose'].diff(6)
+    df['delta_1']  = df['glucose'].diff() #how fast is glucose chnaging
+    df['delta_3']  = df['glucose'].diff(3) # 15 mins ago
+    df['delta_6']  = df['glucose'].diff(6) # 30 mins ago
     df['rolling_mean_12'] = df['glucose'].rolling(12).mean()
-    df['rolling_std_12']  = df['glucose'].rolling(12).std()
-    df['hour']     = df['timestamp'].dt.hour
-    df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
+    df['rolling_std_12']  = df['glucose'].rolling(12).std() # volatility
+    df['hour']     = df['timestamp'].dt.hour # factor in meals, sleep 
+    df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24) # create a circle
     df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
     return df.dropna().reset_index(drop=True)
 
-# ── Step 3: Normalise ─────────────────────────────────────
+# step3 - normalise + scale
 def normalise(df):
     df = df.copy()
     # normalise glucose to 0-1 range using physiological bounds
@@ -51,15 +53,16 @@ def normalise(df):
         df[col] = (df[col] - mean) / (std + 1e-8)   # +1e-8 avoids div by zero
     return df
 
-# ── Step 4: Create sliding windows ───────────────────────
+# step4 - create sliding windows
 def create_windows(df, window_size=24, horizon=6):
     """
     window_size: how many past readings (24 = 2 hours)
-    horizon:     how far ahead to predict (6 = 30 mins)
+    horizon:     how far ahead to predict (6 = 30 mins) 
     
     returns X shape (n_samples, window_size, n_features)
             y shape (n_samples,)  ← normalised glucose value
     """
+    # pasr 2 hrs -> predict glucose 30 mins ahead
     values  = df[FEATURES].values.astype(np.float32)
     targets = df['glucose_norm'].values.astype(np.float32)
     
@@ -70,7 +73,7 @@ def create_windows(df, window_size=24, horizon=6):
     
     return np.array(X), np.array(y)
 
-# ── Step 5: PyTorch Dataset class ────────────────────────
+# step5 - pytorch dataset class
 class GlucoseDataset(Dataset):
     """
     Loads all patients, engineers features, creates windows.
