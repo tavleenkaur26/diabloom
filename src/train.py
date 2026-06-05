@@ -1,5 +1,5 @@
-
 # training loop for GlucoseLSTM
+# predict -> measure error -> learn -> repeat
 
 import torch
 import torch.nn as nn
@@ -14,7 +14,7 @@ from src.model import GlucoseLSTM
 
 # config
 BATCH_SIZE  = 32
-EPOCHS      = 50
+EPOCHS      = 50        # study entire dataset 50 times
 LR          = 1e-3      # learning rate
 HIDDEN_SIZE = 64
 NUM_LAYERS  = 2
@@ -30,15 +30,15 @@ def denormalise(value):
 def train():
     # data
     print("Loading data...")
-    train_ds = GlucoseDataset(split='train', window_size=WINDOW_SIZE, horizon=HORIZON)
+    train_ds = GlucoseDataset(split='train', window_size=WINDOW_SIZE, horizon=HORIZON) # training & validation examples
     val_ds   = GlucoseDataset(split='val',   window_size=WINDOW_SIZE, horizon=HORIZON)
     
-    train_dl = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+    train_dl = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True) # change order in which the model sees windows
     val_dl   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False)
     
     # model
     model     = GlucoseLSTM(hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS)
-    loss_fn   = nn.MSELoss()       # mean squared error
+    loss_fn   = nn.MSELoss()       # mean squared error - large mistakes get punished heavily
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, patience=5, factor=0.5)
@@ -69,7 +69,7 @@ def train():
             # 3. zero gradients
             optimizer.zero_grad()
             
-            # 4. backward pass
+            # 4. backward pass - why was it wrong 
             loss.backward()
             
             # 5. update weights
