@@ -294,6 +294,106 @@ function MealLogger() {
   )
 }
 
+// activity logger
+function ActivityLogger() {
+  const [intensity, setIntensity] = useState<'light'|'moderate'|'intense'|''>('')
+  const [activity,  setActivity]  = useState('exercise')
+  const [duration,  setDuration]  = useState(30)
+  const [result,    setResult]    = useState<any>(null)
+  const [loading,   setLoading]   = useState(false)
+
+  const logActivity = async () => {
+    if (!intensity) return
+    setLoading(true)
+    try {
+      const res = await axios.post('http://127.0.0.1:8000/activity/log', {
+        activity_type: activity,
+        intensity,
+        duration_mins: duration,
+        patient_id:    '550e8400-e29b-41d4-a716-446655440000'
+      })
+      setResult(res.data)
+    } catch {
+      console.error('Failed to log activity')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const intensityColour = {
+    light:    'bg-green-600  hover:bg-green-700',
+    moderate: 'bg-yellow-600 hover:bg-yellow-700',
+    intense:  'bg-red-600    hover:bg-red-700'
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-4 mt-4">
+      <p className="text-sm text-gray-400 mb-3">🏃 Log Activity</p>
+
+      {/* activity type */}
+      <div className="flex gap-2 mb-3">
+        {['exercise','walk','sport','other'].map(a => (
+          <button key={a}
+            onClick={() => setActivity(a)}
+            className={`text-xs px-3 py-1 rounded-lg capitalize transition-colors
+                        ${activity === a 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-800 text-gray-400'}`}
+          >
+            {a}
+          </button>
+        ))}
+      </div>
+
+      {/* intensity */}
+      <p className="text-xs text-gray-500 mb-2">Intensity</p>
+      <div className="flex gap-2 mb-3">
+        {(['light','moderate','intense'] as const).map(i => (
+          <button key={i}
+            onClick={() => setIntensity(i)}
+            className={`text-xs px-3 py-1 rounded-lg capitalize transition-colors
+                        ${intensity === i 
+                          ? intensityColour[i] + ' text-white'
+                          : 'bg-gray-800 text-gray-400'}`}
+          >
+            {i}
+          </button>
+        ))}
+      </div>
+
+      {/* duration */}
+      <div className="flex items-center gap-3 mb-3">
+        <p className="text-xs text-gray-500">Duration:</p>
+        <input
+          type="range" min={5} max={120} step={5}
+          value={duration}
+          onChange={e => setDuration(Number(e.target.value))}
+          className="flex-1"
+        />
+        <p className="text-xs text-white w-12">{duration} mins</p>
+      </div>
+
+      <button
+        onClick={logActivity}
+        disabled={!intensity || loading}
+        className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50
+                   text-white text-sm font-medium py-2 rounded-lg transition-colors"
+      >
+        {loading ? 'Logging...' : 'Log Activity'}
+      </button>
+
+      {result && (
+        <div className="mt-3 bg-gray-800 rounded-lg p-3">
+          <p className="text-yellow-400 text-sm font-medium">
+            ⚠️ {result.risk_window}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">{result.advice}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // main dashboard
 export default function Dashboard() {
   const [readings,   setReadings]   = useState<number[]>([])
@@ -437,6 +537,7 @@ export default function Dashboard() {
       {/* Stats */}
       <StatsBar readings={readings} />
       <MealLogger />
+      <ActivityLogger />
 
       {/* Manual refresh */}
       <button

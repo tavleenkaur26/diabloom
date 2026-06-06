@@ -19,6 +19,7 @@ from groq import Groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 groq_client  = Groq(api_key=GROQ_API_KEY)
 sys.path.append('.')
+from datetime import datetime, timedelta
 
 from src.model import GlucoseLSTM
 from src.explain import (predict_glucose, get_feature_importance, 
@@ -566,3 +567,44 @@ def get_iob_history():
         })
     
     return {"history": history}
+
+class ActivityLog(BaseModel):
+    activity_type: str    # "exercise", "walk", "sport", "other"
+    intensity:     str    # "light", "moderate", "intense"
+    duration_mins: int
+    patient_id:    str = "default"
+
+@app.post("/activity/log")
+def log_activity(body: ActivityLog):
+    """
+    Logs an activity event.
+    Flags next 2 hours as elevated hypo risk.
+    Exercise drops glucose for up to 12 hours post-activity.
+    """
+    # calculate risk window based on intensity
+    risk_windows = {
+        "light":    120,   # 2 hrs elevated risk
+        "moderate": 240,   # 4 hrs
+        "intense":  480    # 8 hrs
+    }
+    risk_mins = risk_windows.get(body.intensity, 120)
+    
+    # save to supabase
+    from src.database import supabase
+    supabase.table("activity_logs").insert({
+        "user_id":       body.patient_id,
+        "activity_type": body.activity_type,
+        "intensity":     body.intensity,
+        "duration_mins": body.duration_mins,
+        "risk_until": (
+            datetime.utcnow() + timedelta(minutes=risk_mins)
+        ).isoformat()
+    }).execute()
+    
+    return {
+        "logged":        True,
+        "activity":      body.activity_type,
+        "intensity":     body.intensity,
+        "risk_window":   f"Elevated hypo risk for next {risk_mins//60} hours",
+        "advice":        f"Monitor closely — {body.intensity} exercise increases hypo risk"
+    }
