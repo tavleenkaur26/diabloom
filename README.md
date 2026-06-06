@@ -16,7 +16,7 @@ For people living with Type 1 Diabetes, the more valuable question is:
 
 "Where will my glucose be in 30 minutes?"
 
-DiabLoom attempts to answer that question by learning patterns from historical glucose data and generating early warnings before a potential hypoglycemic event occurs.
+DiaBloom attempts to answer that question by learning patterns from historical glucose data and generating early warnings before a potential hypoglycemic event occurs.
 
 ---
 
