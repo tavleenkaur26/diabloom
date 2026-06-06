@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from src.database import (save_glucose_reading, get_recent_readings,
                            save_prediction, get_prediction_history)
 from dotenv import load_dotenv
+from src.insulin import load_bolus_data, get_iob_context, calculate_iob
+
 import torch
 import numpy as np
 import sys
@@ -51,6 +53,15 @@ print("Loading background data for SHAP...")
 val_ds         = GlucoseDataset(split='val')
 BACKGROUND     = val_ds.X.numpy()[:50]   # 50 samples is enough for SHAP
 print("Background data ready ✓")
+
+# load bolus data once at startup for IOB calculations
+print("Loading bolus data for IOB...")
+try:
+    BOLUS_DF = load_bolus_data('data/raw/carelink.csv')
+    print(f"Bolus data loaded ✓ ({len(BOLUS_DF)} doses)")
+except Exception as e:
+    print(f"Bolus data not available: {e}")
+    BOLUS_DF = None
 
 # req/response models
 class GlucoseReadings(BaseModel):
@@ -177,46 +188,55 @@ def predict(body: GlucoseReadings):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/iob")
+def get_iob():
+    """Returns current insulin on board from CareLink bolus history."""
+    if BOLUS_DF is None:
+        return {"iob_units": 0, "risk_level": "none",
+                "message": "No bolus data available"}
+    context = get_iob_context(BOLUS_DF)
+    return context
+
 @app.post("/predict/fast")
 def predict_fast(body: GlucoseReadings):
-    """
-    Fast prediction without SHAP — for real-time use.
-    Returns prediction in <100ms.
-    """
+    """Fast prediction without SHAP — for real-time use."""
     try:
         window    = preprocess_readings(body.readings)
         predicted = predict_glucose(model, window)
-        
-        # simple rule-based explanation without SHAP
-        readings  = np.array(body.readings)
-        delta_30  = readings[-1] - readings[-6] if len(readings) >= 6 else 0
-        
+
+        readings = np.array(body.readings)
+        delta_30 = readings[-1] - readings[-6] if len(readings) >= 6 else 0
+
         if predicted < 70:
             level   = "CRITICAL"
             message = f"⛔ Hypo predicted — {predicted:.0f} mg/dL in 30 mins"
-        elif predicted < 90:
+        elif predicted < 95:
             level   = "WARNING"
             message = f"⚠️ Glucose heading low — {predicted:.0f} mg/dL in 30 mins"
         else:
             level   = "OK"
             message = f"Glucose stable — {predicted:.0f} mg/dL predicted"
-        
-        # simple explanation from raw delta
+
         if delta_30 < -20:
             explanation = f"Dropping fast — {abs(delta_30):.0f} mg/dL in last 30 mins"
         elif delta_30 < -10:
-            explanation = f"Gradual downward trend over last 30 mins"
+            explanation = "Gradual downward trend over last 30 mins"
         else:
             explanation = "Glucose trajectory looks stable"
-        
+
+        iob_context = get_iob_context(BOLUS_DF) if BOLUS_DF is not None else None
+        if iob_context and iob_context['iob_units'] > 1.0:
+            explanation = f"{explanation} + {iob_context['message']}"
+
         return {
             "predicted_glucose": round(predicted, 1),
             "alert_level":       level,
             "message":           message,
             "explanation":       explanation,
+            "iob":               iob_context,
             "error_margin":      18.5
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -511,3 +531,38 @@ Return ONLY the JSON. No explanation, no markdown."""
         raise HTTPException(status_code=500, detail="Failed to parse nutrition from image")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/iob")
+    def get_iob():
+        """
+        Returns current insulin on board from CareLink bolus history.
+        """
+        if BOLUS_DF is None:
+            return {"iob_units": 0, "risk_level": "none", 
+                "message": "No bolus data available"}
+        context = get_iob_context(BOLUS_DF)
+        return context
+
+@app.get("/iob/history")
+def get_iob_history():
+    """
+    Returns IOB curve for the last 6 hours — useful for charting.
+    """
+    if BOLUS_DF is None:
+        return {"history": []}
+    
+    from datetime import datetime, timedelta
+    now     = datetime.now()
+    history = []
+    
+    # compute IOB every 5 mins for last 6 hours
+    for mins_back in range(360, -5, -5):
+        t   = now - timedelta(minutes=mins_back)
+        iob = calculate_iob(BOLUS_DF, t)
+        history.append({
+            "time":     t.strftime('%H:%M'),
+            "iob":      iob,
+            "mins_ago": mins_back
+        })
+    
+    return {"history": history}
