@@ -1,11 +1,15 @@
 # supabase connection and database operations
 
 from supabase import create_client, Client
+from dotenv import load_dotenv
 import os
+load_dotenv() 
 from datetime import datetime
 
-SUPABASE_URL = "https://qoasrjavkixigkypfpnf.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvYXNyamF2a2l4aWdreXBmcG5mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3MjIxMzYsImV4cCI6MjA5NjI5ODEzNn0.qF0xxjEFbiFy_t_geQvXJYv_IVjknSMOJzceQ3290MA"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+print(f"Supabase URL loaded: {SUPABASE_URL is not None}") 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 

@@ -6,10 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from src.database import (save_glucose_reading, get_recent_readings,
                            save_prediction, get_prediction_history)
+from dotenv import load_dotenv
 import torch
 import numpy as np
 import sys
 import os
+load_dotenv()
+from groq import Groq
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+groq_client  = Groq(api_key=GROQ_API_KEY)
 sys.path.append('.')
 
 from src.model import GlucoseLSTM
@@ -63,6 +68,18 @@ class PredictionResponse(BaseModel):
     explanation:        str | None
     top_features:       list[str] | None
     error_margin:       float     # ± mg/dL based on validation MAE
+
+class MealInput(BaseModel):
+    description: str
+    patient_id:  str = "default"
+
+class MealPredictionInput(BaseModel):
+    readings:        list[float]
+    meal_description: str = ""
+    meal_carbs:      float = 0
+    meal_gi:         float = 0
+    mins_since_meal: int   = 0
+    patient_id:      str   = "default"
 
 # helper: preprocess raw readings into model input 
 def preprocess_readings(readings: list[float]) -> np.ndarray:
@@ -301,3 +318,124 @@ def get_my_latest_readings():
         "latest_glucose": float(last_24['glucose'].iloc[-1]),
         "count": len(last_24)
     }
+# meal intelligence endpts
+@app.post("/meal/analyse")
+def analyse_meal(body: MealInput):
+    """
+    Takes a plain English meal description.
+    Uses Groq (Llama 3) to extract structured nutrition data.
+    Returns carbs, fat, protein, GI, and expected glucose impact.
+    """
+    try:
+        prompt = f"""You are a clinical dietitian specialising in Type 1 Diabetes.
+        
+Analyse this meal and return ONLY a JSON object with these exact fields:
+{{
+  "carbs_g": <total carbohydrates in grams, number>,
+  "fat_g": <total fat in grams, number>,
+  "protein_g": <total protein in grams, number>,
+  "gi_score": <average glycemic index 0-100, number>,
+  "fiber_g": <dietary fiber in grams, number>,
+  "estimated_impact": <one of: "low spike", "moderate spike", "high spike">,
+  "peak_time_mins": <estimated minutes until glucose peaks, number>,
+  "notes": <one sentence clinical note about this meal for a T1D patient>
+}}
+
+Meal: {body.description}
+
+Return ONLY the JSON object. No explanation, no markdown, no backticks."""
+
+        response = groq_client.chat.completions.create(
+            model    = "llama-3.3-70b-versatile",
+            messages = [{"role": "user", "content": prompt}],
+            temperature = 0.1    # low temperature for consistent structured output
+        )
+        
+        raw = response.choices[0].message.content.strip()
+        
+        # parse JSON response
+        import json
+        nutrition = json.loads(raw)
+        
+        # save to supabase
+        from src.database import save_meal
+        save_meal(
+            user_id     = body.patient_id,
+            description = body.description,
+            carbs       = nutrition.get('carbs_g', 0),
+            fat         = nutrition.get('fat_g', 0),
+            protein     = nutrition.get('protein_g', 0),
+            gi          = nutrition.get('gi_score', 0)
+        )
+        
+        return {
+            "description": body.description,
+            "nutrition":   nutrition,
+            "logged":      True
+        }
+    
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, 
+                          detail="Failed to parse nutrition data from LLM")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/meal/predict-impact")
+def predict_meal_impact(body: MealPredictionInput):
+    """
+    Combines glucose prediction with meal context.
+    If meal was recently logged, adjusts prediction narrative accordingly.
+    """
+    try:
+        # get base glucose prediction
+        window    = preprocess_readings(body.readings)
+        predicted = predict_glucose(model, window)
+        
+        # adjust alert message based on meal context
+        meal_context = ""
+        adjusted_prediction = predicted
+        
+        if body.meal_carbs > 0 and body.mins_since_meal < 120:
+            # post meal — glucose will likely rise
+            carb_impact = body.meal_carbs * 0.4   # rough: 1g carb ≈ 0.4 mg/dL rise
+            time_factor = 1 - (body.mins_since_meal / 120)
+            adjusted_prediction = predicted + (carb_impact * time_factor * 0.3)
+            
+            if body.meal_gi > 70:
+                meal_context = (f"High GI meal ({body.meal_description}) logged "
+                               f"{body.mins_since_meal} mins ago — "
+                               f"fast spike likely")
+            elif body.meal_gi > 50:
+                meal_context = (f"Moderate GI meal logged "
+                               f"{body.mins_since_meal} mins ago — "
+                               f"gradual rise expected")
+            else:
+                meal_context = (f"Low GI meal logged — "
+                               f"slow glucose rise expected")
+        
+        # determine alert level
+        if adjusted_prediction < 70:
+            level   = "CRITICAL"
+            message = f"⛔ Hypo predicted — {adjusted_prediction:.0f} mg/dL in 30 mins"
+        elif adjusted_prediction < 95:
+            level   = "WARNING"
+            message = f"⚠️ Glucose heading low — {adjusted_prediction:.0f} mg/dL in 30 mins"
+        elif adjusted_prediction > 250:
+            level   = "HIGH"
+            message = f"📈 High glucose predicted — {adjusted_prediction:.0f} mg/dL in 30 mins"
+        else:
+            level   = "OK"
+            message = f"Glucose stable — {adjusted_prediction:.0f} mg/dL predicted"
+        
+        return {
+            "predicted_glucose":  round(adjusted_prediction, 1),
+            "base_prediction":    round(predicted, 1),
+            "alert_level":        level,
+            "message":            message,
+            "meal_context":       meal_context,
+            "error_margin":       18.5
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

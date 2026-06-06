@@ -9,3 +9,4 @@ data/raw/
 *.zip
 frontend/node_modules/
 frontend/.next/
+.env
