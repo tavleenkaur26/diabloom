@@ -2,13 +2,13 @@
 
 > Predicting hypoglycemia before it happens.
 
-DiabLoom is an explainable machine learning system for Type 1 Diabetes that forecasts future glucose levels, predicts impending hypoglycemia up to 30 minutes in advance, and provides human-readable explanations for its predictions.
+DiaBloom is an explainable machine learning system for Type 1 Diabetes that forecasts future glucose levels, predicts impending hypoglycemia up to 30 minutes in advance, and provides human-readable explanations for its predictions.
 
 The project combines time-series forecasting, explainable AI, real CGM data, and modern full-stack engineering into a single end-to-end application.
 
 ---
 
-## Why DiabLoom?
+## Why DiaBloom?
 
 Continuous Glucose Monitors (CGMs) typically alert users after glucose levels have already become dangerous.
 
@@ -181,6 +181,6 @@ env GROQ_API_KEY=... SUPABASE_URL=... SUPABASE_KEY=...
 
 ## Disclaimer
 
-DiabLoom is a research and educational project and is not intended for medical decision-making or clinical use.
+DiaBloom is a research and educational project and is not intended for medical decision-making or clinical use.
 
 Always follow guidance from qualified healthcare professionals and approved diabetes management devices.
