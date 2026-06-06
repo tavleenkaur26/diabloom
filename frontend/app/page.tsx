@@ -108,6 +108,99 @@ function CustomTooltip({ active, payload, label }: any) {
     </div>
   )
 }
+// meal logger component
+function MealLogger() {
+  const [description, setDescription] = useState('')
+  const [nutrition,   setNutrition]   = useState<any>(null)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
+
+  const analyseMeal = async () => {
+    if (!description.trim()) return
+    setLoading(true)
+    setError('')
+    setNutrition(null)
+    try {
+      const res = await axios.post('http://127.0.0.1:8000/meal/analyse', {
+        description,
+        patient_id: '550e8400-e29b-41d4-a716-446655440000'
+      })
+      setNutrition(res.data.nutrition)
+    } catch (err) {
+      setError('Failed to analyse meal. Check backend is running.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const impactColour = {
+    'low spike':      'text-green-400',
+    'moderate spike': 'text-yellow-400',
+    'high spike':     'text-red-400'
+  }
+
+  return (
+    <div className="bg-gray-900 rounded-xl p-4 mt-4">
+      <p className="text-sm text-gray-400 mb-3">🍽️ Log a Meal</p>
+
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text"
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && analyseMeal()}
+          placeholder="e.g. 2 rotis, dal, small rice, curd"
+          className="flex-1 bg-gray-800 text-white text-sm 
+                     rounded-lg px-3 py-2 outline-none 
+                     border border-gray-700 focus:border-blue-500"
+        />
+        <button
+          onClick={analyseMeal}
+          disabled={loading || !description.trim()}
+          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50
+                     text-white text-sm font-medium px-4 py-2 
+                     rounded-lg transition-colors"
+        >
+          {loading ? '...' : 'Analyse'}
+        </button>
+      </div>
+
+      {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
+
+      {nutrition && (
+        <div className="bg-gray-800 rounded-lg p-3">
+          {/* impact badge */}
+          <p className={`text-sm font-bold mb-2 
+                        ${impactColour[nutrition.estimated_impact as keyof typeof impactColour] 
+                          || 'text-white'}`}>
+            {nutrition.estimated_impact === 'low spike'      && '🟢'}
+            {nutrition.estimated_impact === 'moderate spike' && '🟡'}
+            {nutrition.estimated_impact === 'high spike'     && '🔴'}
+            {' '}{nutrition.estimated_impact} — peaks ~{nutrition.peak_time_mins} mins
+          </p>
+
+          {/* nutrition grid */}
+          <div className="grid grid-cols-4 gap-2 mb-2">
+            {[
+              { label: 'Carbs',   value: `${nutrition.carbs_g}g`,   color: 'text-orange-400' },
+              { label: 'Fat',     value: `${nutrition.fat_g}g`,     color: 'text-yellow-400' },
+              { label: 'Protein', value: `${nutrition.protein_g}g`, color: 'text-blue-400'   },
+              { label: 'GI',      value: nutrition.gi_score,        color: 'text-purple-400' },
+            ].map(item => (
+              <div key={item.label} className="text-center">
+                <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
+                <p className="text-xs text-gray-500">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* clinical note */}
+          <p className="text-xs text-gray-400 italic">{nutrition.notes}</p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // main dashboard
 export default function Dashboard() {
@@ -251,6 +344,7 @@ export default function Dashboard() {
 
       {/* Stats */}
       <StatsBar readings={readings} />
+      <MealLogger />
 
       {/* Manual refresh */}
       <button
