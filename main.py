@@ -4,6 +4,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from src.database import (save_glucose_reading, get_recent_readings,
+                           save_prediction, get_prediction_history)
 import torch
 import numpy as np
 import sys
@@ -195,3 +197,74 @@ def predict_fast(body: GlucoseReadings):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+   #database endpts
+
+class ReadingInput(BaseModel):
+    user_id:   str
+    glucose:   float
+    timestamp: str = None
+    source:    str = 'manual'
+
+@app.post("/readings/save")
+def save_reading(body: ReadingInput):
+    """Save a glucose reading to database"""
+    result = save_glucose_reading(
+        body.user_id, body.glucose, 
+        body.timestamp, body.source
+    )
+    return {"saved": True, "data": result}
+
+@app.get("/readings/{user_id}")
+def get_readings(user_id: str, limit: int = 24):
+    """Get recent readings for a user from database"""
+    readings = get_recent_readings(user_id, limit)
+    return {"readings": readings, "count": len(readings)}
+
+@app.post("/predict/save")
+def predict_and_save(body: GlucoseReadings):
+    """
+    Predict AND save both the readings and prediction to database.
+    This is the main endpoint the frontend will call.
+    """
+    try:
+        # save each reading
+        for i, glucose in enumerate(body.readings):
+            from datetime import datetime, timedelta
+            ts = (datetime.utcnow() - 
+                  timedelta(minutes=5*(23-i))).isoformat()
+            save_glucose_reading(body.patient_id, glucose, ts)
+        
+        # run prediction
+        window    = preprocess_readings(body.readings)
+        predicted = predict_glucose(model, window)
+        importance = get_feature_importance(model, window, BACKGROUND)
+        alert     = generate_alert(predicted, importance, threshold=95)
+        
+        # save prediction
+        save_prediction(
+            user_id           = body.patient_id,
+            predicted_glucose = alert['predicted_glucose'],
+            alert_level       = alert['level'],
+            message           = alert['message'],
+            explanation       = alert.get('explanation', ''),
+            error_margin      = 18.5
+        )
+        
+        return PredictionResponse(
+            predicted_glucose = alert['predicted_glucose'],
+            alert_level       = alert['level'],
+            message           = alert['message'],
+            explanation       = alert.get('explanation'),
+            top_features      = alert.get('top_features'),
+            error_margin      = 18.5
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/history/{user_id}")
+def get_history(user_id: str):
+    """Get prediction history for a user"""
+    predictions = get_prediction_history(user_id)
+    return {"predictions": predictions}
