@@ -11,6 +11,7 @@ import torch
 import numpy as np
 import sys
 import os
+import json
 load_dotenv()
 from groq import Groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -80,6 +81,10 @@ class MealPredictionInput(BaseModel):
     meal_gi:         float = 0
     mins_since_meal: int   = 0
     patient_id:      str   = "default"
+
+class PhotoMealInput(BaseModel):
+    image_base64: str
+    patient_id:   str = "default"
 
 # helper: preprocess raw readings into model input 
 def preprocess_readings(readings: list[float]) -> np.ndarray:
@@ -437,5 +442,72 @@ def predict_meal_impact(body: MealPredictionInput):
             "error_margin":       18.5
         }
     
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    class PhotoMealInput(BaseModel):
+        image_base64: str       # base64 encoded image
+        patient_id:   str = "default"
+
+@app.post("/meal/analyse-photo")
+def analyse_meal_photo(body: PhotoMealInput):
+    """
+    Takes a base64 photo of a meal.
+    Uses Groq vision to identify food and extract nutrition.
+    """
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.2-90b-vision-preview",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{body.image_base64}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": """You are a clinical dietitian specialising in Type 1 Diabetes.
+                        
+Identify all foods visible in this image and return ONLY a JSON object:
+{
+  "identified_foods": ["food1", "food2"],
+  "carbs_g": <number>,
+  "fat_g": <number>,
+  "protein_g": <number>,
+  "gi_score": <number 0-100>,
+  "fiber_g": <number>,
+  "estimated_impact": <"low spike" or "moderate spike" or "high spike">,
+  "peak_time_mins": <number>,
+  "notes": <one sentence for T1D patient>
+}
+
+Return ONLY the JSON. No explanation, no markdown."""
+                    }
+                ]
+            }],
+            temperature=0.1
+        )
+        
+        raw       = response.choices[0].message.content.strip()
+        nutrition = json.loads(raw)
+        
+        # save to database
+        from src.database import save_meal
+        save_meal(
+            user_id     = body.patient_id,
+            description = ', '.join(nutrition.get('identified_foods', ['unknown'])),
+            carbs       = nutrition.get('carbs_g', 0),
+            fat         = nutrition.get('fat_g', 0),
+            protein     = nutrition.get('protein_g', 0),
+            gi          = nutrition.get('gi_score', 0)
+        )
+        
+        return {"nutrition": nutrition, "logged": True}
+    
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Failed to parse nutrition from image")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
