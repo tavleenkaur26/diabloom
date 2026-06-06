@@ -268,3 +268,36 @@ def get_history(user_id: str):
     """Get prediction history for a user"""
     predictions = get_prediction_history(user_id)
     return {"predictions": predictions}
+
+@app.get("/mydata/latest")
+def get_my_latest_readings():
+    """
+    Returns your last 24 real CGM readings from CareLink export.
+    This replaces synthetic data in the frontend.
+    """
+    import pandas as pd
+    
+    df = pd.read_csv('data/raw/carelink.csv', 
+                     skiprows=6, on_bad_lines='skip')
+    
+    df['timestamp'] = pd.to_datetime(
+        df['Date'].astype(str) + ' ' + df['Time'].astype(str),
+        format='%Y/%m/%d %H:%M:%S', errors='coerce'
+    )
+    
+    cgm = df[df['Sensor Glucose (mg/dL)'].notna()][
+        ['timestamp', 'Sensor Glucose (mg/dL)']
+    ].copy()
+    cgm.columns = ['timestamp', 'glucose']
+    cgm['glucose'] = pd.to_numeric(cgm['glucose'], errors='coerce')
+    cgm = cgm.dropna().sort_values('timestamp').reset_index(drop=True)
+    
+    # get last 24 readings
+    last_24 = cgm.tail(24)
+    
+    return {
+        "readings": last_24['glucose'].tolist(),
+        "timestamps": last_24['timestamp'].astype(str).tolist(),
+        "latest_glucose": float(last_24['glucose'].iloc[-1]),
+        "count": len(last_24)
+    }

@@ -25,13 +25,17 @@ interface GlucosePoint {
 // simulated live glucose feed
 // in production this comes from Tidepool/Nightscout API
 // for now simulated a dropping glucose pattern
-function generateReadings(): number[] {
-  const base = 160
-  return Array.from({ length: 24 }, (_, i) => {
-    const drop = i * 3.5
-    const noise = (Math.random() - 0.5) * 8
-    return Math.max(50, base - drop + noise)
-  })
+async function fetchRealReadings(): Promise<number[]> {
+  try {
+    const res = await axios.get('http://127.0.0.1:8000/mydata/latest')
+    return res.data.readings
+  } catch (err) {
+    console.error('Failed to fetch real readings:', err)
+    // fallback to synthetic if backend unreachable
+    return Array.from({ length: 24 }, (_, i) => 
+      Math.max(50, 140 - i * 2 + (Math.random() - 0.5) * 10)
+    )
+  }
 }
 
 // alert card component
@@ -128,8 +132,8 @@ export default function Dashboard() {
     }
   }, [])
 
-  const updateReadings = useCallback(() => {
-    const newReadings = generateReadings()
+  const updateReadings = useCallback(async () => {
+    const newReadings = await fetchRealReadings()
     setReadings(newReadings)
 
     // build chart data — last 24 actual + 1 predicted point
