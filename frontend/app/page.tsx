@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -108,14 +108,16 @@ function CustomTooltip({ active, payload, label }: any) {
     </div>
   )
 }
-// meal logger component
+//meal logger component
 function MealLogger() {
   const [description, setDescription] = useState('')
   const [nutrition,   setNutrition]   = useState<any>(null)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
+  const [mode,        setMode]        = useState<'text'|'camera'>('text')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const analyseMeal = async () => {
+  const analyseMealText = async () => {
     if (!description.trim()) return
     setLoading(true)
     setError('')
@@ -126,56 +128,146 @@ function MealLogger() {
         patient_id: '550e8400-e29b-41d4-a716-446655440000'
       })
       setNutrition(res.data.nutrition)
-    } catch (err) {
-      setError('Failed to analyse meal. Check backend is running.')
+    } catch {
+      setError('Failed to analyse meal.')
     } finally {
       setLoading(false)
     }
   }
 
-  const impactColour = {
+  const analyseMealPhoto = async (file: File) => {
+    setLoading(true)
+    setError('')
+    setNutrition(null)
+    try {
+      // convert image to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      const res = await axios.post('http://127.0.0.1:8000/meal/analyse-photo', {
+        image_base64: base64,
+        patient_id:   '550e8400-e29b-41d4-a716-446655440000'
+      })
+      setNutrition(res.data.nutrition)
+    } catch {
+      setError('Failed to analyse photo.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) analyseMealPhoto(file)
+  }
+
+  const impactColour: Record<string, string> = {
     'low spike':      'text-green-400',
     'moderate spike': 'text-yellow-400',
     'high spike':     'text-red-400'
+  }
+
+  const impactIcon: Record<string, string> = {
+    'low spike':      '🟢',
+    'moderate spike': '🟡',
+    'high spike':     '🔴'
   }
 
   return (
     <div className="bg-gray-900 rounded-xl p-4 mt-4">
       <p className="text-sm text-gray-400 mb-3">🍽️ Log a Meal</p>
 
+      {/* mode toggle */}
       <div className="flex gap-2 mb-3">
-        <input
-          type="text"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && analyseMeal()}
-          placeholder="e.g. 2 rotis, dal, small rice, curd"
-          className="flex-1 bg-gray-800 text-white text-sm 
-                     rounded-lg px-3 py-2 outline-none 
-                     border border-gray-700 focus:border-blue-500"
-        />
         <button
-          onClick={analyseMeal}
-          disabled={loading || !description.trim()}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50
-                     text-white text-sm font-medium px-4 py-2 
-                     rounded-lg transition-colors"
+          onClick={() => setMode('text')}
+          className={`text-xs px-3 py-1 rounded-lg transition-colors
+                      ${mode === 'text' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 text-gray-400'}`}
         >
-          {loading ? '...' : 'Analyse'}
+          ✏️ Type
+        </button>
+        <button
+          onClick={() => setMode('camera')}
+          className={`text-xs px-3 py-1 rounded-lg transition-colors
+                      ${mode === 'camera' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 text-gray-400'}`}
+        >
+          📷 Photo
         </button>
       </div>
 
+      {/* text mode */}
+      {mode === 'text' && (
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && analyseMealText()}
+            placeholder="e.g. 2 rotis, dal, small rice, curd"
+            className="flex-1 bg-gray-800 text-white text-sm
+                       rounded-lg px-3 py-2 outline-none
+                       border border-gray-700 focus:border-blue-500"
+          />
+          <button
+            onClick={analyseMealText}
+            disabled={loading || !description.trim()}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50
+                       text-white text-sm font-medium px-4 py-2
+                       rounded-lg transition-colors"
+          >
+            {loading ? '...' : 'Analyse'}
+          </button>
+        </div>
+      )}
+
+      {/* camera mode */}
+      {mode === 'camera' && (
+        <div className="mb-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="w-full bg-gray-800 hover:bg-gray-700 
+                       border-2 border-dashed border-gray-600
+                       text-gray-400 text-sm py-6 rounded-lg
+                       transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Analysing photo...' : '📷 Tap to take photo or upload'}
+          </button>
+        </div>
+      )}
+
       {error && <p className="text-red-400 text-xs mb-2">{error}</p>}
 
+      {/* nutrition result */}
       {nutrition && (
         <div className="bg-gray-800 rounded-lg p-3">
+          {/* identified foods (photo mode) */}
+          {nutrition.identified_foods && (
+            <p className="text-xs text-gray-400 mb-2">
+              Identified: {nutrition.identified_foods.join(', ')}
+            </p>
+          )}
+
           {/* impact badge */}
-          <p className={`text-sm font-bold mb-2 
-                        ${impactColour[nutrition.estimated_impact as keyof typeof impactColour] 
-                          || 'text-white'}`}>
-            {nutrition.estimated_impact === 'low spike'      && '🟢'}
-            {nutrition.estimated_impact === 'moderate spike' && '🟡'}
-            {nutrition.estimated_impact === 'high spike'     && '🔴'}
+          <p className={`text-sm font-bold mb-2
+                        ${impactColour[nutrition.estimated_impact] || 'text-white'}`}>
+            {impactIcon[nutrition.estimated_impact] || '⚪'}
             {' '}{nutrition.estimated_impact} — peaks ~{nutrition.peak_time_mins} mins
           </p>
 
