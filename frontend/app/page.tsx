@@ -502,7 +502,7 @@ export default function Dashboard() {
                   tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'DM Mono' }}
                   axisLine={false} tickLine={false}
                   tickFormatter={(v) => `${v}`}
-                  />
+                />
                   <Tooltip content={<GlucoseTooltip />} />
                   <ReferenceLine y={70} stroke="#f8717140" strokeDasharray="4 4"
   label={{ value: 'hypo 70', fill: '#f87171', fontSize: 10, 
