@@ -405,7 +405,7 @@ export default function Dashboard() {
         {/* navbar */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '18px 40px',
+          padding: '18px 48px',
           borderBottom: '1px solid rgba(255,255,255,0.05)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
@@ -494,15 +494,22 @@ export default function Dashboard() {
                   <XAxis dataKey="time"
                     tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'DM Mono' }}
                     interval="preserveStartEnd" axisLine={false} tickLine={false} />
-                  <YAxis domain={[50, 280]}
-                    tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'DM Mono' }}
-                    axisLine={false} tickLine={false}
-                    tickFormatter={(v) => `${v}`} />
+                  <YAxis
+                  domain={([dataMin, dataMax]: number[]) => [
+                    Math.max(40, dataMin - 25),
+                   Math.min(400, dataMax + 40)
+                  ]}
+                  tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'DM Mono' }}
+                  axisLine={false} tickLine={false}
+                  tickFormatter={(v) => `${v}`}
+                  />
                   <Tooltip content={<GlucoseTooltip />} />
                   <ReferenceLine y={70} stroke="#f8717140" strokeDasharray="4 4"
-                    label={{ value: 'hypo', fill: '#f87171', fontSize: 10, fontFamily: 'DM Mono', position: 'insideTopLeft' }} />
-                  <ReferenceLine y={180} stroke="#fbbf2440" strokeDasharray="4 4"
-                    label={{ value: 'hyper', fill: '#fbbf24', fontSize: 10, fontFamily: 'DM Mono', position: 'insideTopLeft' }} />
+  label={{ value: 'hypo 70', fill: '#f87171', fontSize: 10, 
+           fontFamily: 'DM Mono', position: 'insideRight' }} />
+<ReferenceLine y={180} stroke="#fbbf2440" strokeDasharray="4 4"
+  label={{ value: 'hyper 180', fill: '#fbbf24', fontSize: 10, 
+           fontFamily: 'DM Mono', position: 'insideRight' }} />
                   {/* actual glucose area */}
                   <Area type="monotone" dataKey="actual" stroke="#3b82f6" strokeWidth={2}
                     fill="url(#glucGrad)" dot={false} connectNulls={false} name="actual" />
