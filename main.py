@@ -376,12 +376,20 @@ Meal: {body.description}
 Return ONLY the JSON object. No explanation, no markdown, no backticks."""
 
         response = groq_client.chat.completions.create(
-            model    = "llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages = [{"role": "user", "content": prompt}],
-            temperature = 0.1    # low temperature for consistent structured output
+            temperature = 0.1,    # low temperature for consistent structured output
+            max_tokens=300
         )
         
         raw = response.choices[0].message.content.strip()
+
+        # clean up common LLM formatting issues
+        import re
+        raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL)
+        raw = re.sub(r'```json\s*', '', raw)
+        raw = re.sub(r'```\s*', '', raw)
+        raw = raw.strip()
         
         # parse JSON response
         import json
@@ -612,3 +620,28 @@ def log_activity(body: ActivityLog):
         "risk_window":   f"Elevated hypo risk for next {risk_mins//60} hours",
         "advice":        f"Monitor closely — {body.intensity} exercise increases hypo risk"
     }
+
+@app.post("/meal/debug")
+def debug_meal(body: MealInput):
+    prompt = f"""You are a clinical dietitian specialising in Type 1 Diabetes.
+Analyse this meal and return ONLY a JSON object with these exact fields:
+{{
+  "carbs_g": <total carbohydrates in grams, number>,
+  "fat_g": <total fat in grams, number>,
+  "protein_g": <total protein in grams, number>,
+  "gi_score": <average glycemic index 0-100, number>,
+  "fiber_g": <dietary fiber in grams, number>,
+  "estimated_impact": <one of: "low spike", "moderate spike", "high spike">,
+  "peak_time_mins": <estimated minutes until glucose peaks, number>,
+  "notes": <one sentence clinical note about this meal for a T1D patient>
+}}
+Meal: {body.description}
+Return ONLY the JSON object. No explanation, no markdown, no backticks."""
+
+    response = groq_client.chat.completions.create(
+        model="qwen/qwen3.6-27b",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1
+    )
+    raw = response.choices[0].message.content
+    return {"raw": raw}
