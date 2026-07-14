@@ -153,7 +153,8 @@ The model learns from engineered features including:
 ### AI Services
 
 - Groq API
-- Llama 3.3 70B
+- Llama 3.1 8B Instant (meal text parsing)
+- GPT-OSS 120B (meal photo recognition)
 
 ---
 
