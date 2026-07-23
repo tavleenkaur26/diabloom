@@ -75,19 +75,24 @@ The system uses a large language model to estimate:
 ## Architecture
 
 User CGM Data
-↓
-Feature Engineering (9 physiological + temporal features incl. IOB)
-↓
-LSTM Forecasting Model (30-min glucose prediction)
-↓
-SHAP Explainability Layer (feature attribution)
-↓
-Risk Assessment Engine (threshold + trend + IOB logic)
-↓
-Context Injection Layer (meal + activity signals)
-↓
+        ↓
+Feature Engineering
+(9 physiological + temporal features incl. IOB)
+        ↓
+LSTM Forecasting Model
+(30-min glucose prediction)
+        ↓
+SHAP Explainability Layer
+(feature attribution)
+        ↓
+Risk Assessment Engine
+(threshold + trend + IOB logic)
+        ↓
+Context Injection Layer
+(meal + activity signals)
+        ↓
 FastAPI Backend
-↓
+        ↓
 Next.js Dashboard
 
 ---
@@ -156,16 +161,19 @@ The model learns from 9 engineered features:
 
 ## Tech Stack
 
-Machine Learning: PyTorch · NumPy · Pandas · SHAP
-Backend: FastAPI · Pydantic
-Frontend: Next.js · Tailwind CSS · Recharts
-Infrastructure: Supabase · PostgreSQL
-AI Services: Groq API · Llama 3.1 8B Instant (meal text parsing) · Llama 4 Scout 17B (meal photo recognition)
+| Category | Technologies |
+|----------|--------------|
+| **Machine Learning** | PyTorch · NumPy · Pandas · SHAP |
+| **Backend** | FastAPI · Pydantic |
+| **Frontend** | Next.js · Tailwind CSS · Recharts |
+| **Infrastructure** | Supabase · PostgreSQL |
+| **AI Services** | Groq API · Llama 3.1 8B Instant (meal text parsing) · Llama 4 Scout 17B (meal photo recognition) |
 
 ---
 
 ## Project Structure
 
+```text
 diabloom/
 ├── src/
 │   ├── dataset.py
@@ -180,7 +188,7 @@ diabloom/
 │   └── ohio_training.ipynb
 ├── results/
 └── main.py
-
+```
 ---
 
 ## Run Locally
