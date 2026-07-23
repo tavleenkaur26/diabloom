@@ -25,8 +25,9 @@ DiaBloom attempts to answer that question by learning patterns from historical g
 ### Glucose Forecasting
 
 - Predicts glucose levels 30 minutes into the future
-- Uses an LSTM neural network trained on continuous glucose monitoring data
+- Uses a two-layer LSTM neural network trained on real CGM data
 - Consumes the previous 2 hours of glucose history as input
+- Integrates Insulin-on-Board (IOB) as a direct model feature
 - Generates personalized risk alerts
 
 ### Explainable AI
@@ -38,8 +39,14 @@ Examples:
 - Glucose has been falling steadily for the last 30 minutes
 - Recent glucose volatility is unusually high
 - Historical patterns indicate increased risk at this time of day
+- Active insulin from a recent bolus is increasing hypoglycemia risk
 
 SHAP values are used to identify the features that contributed most strongly to each prediction.
+
+### Clinical Evaluation
+
+Clarke Error Grid Analysis: 93.7% Zone A+B (clinically safe predictions)
+Essentially zero Zone E (dangerous) predictions
 
 ### Personal Data Integration
 
@@ -69,13 +76,15 @@ The system uses a large language model to estimate:
 
 User CGM Data
 ↓
-Feature Engineering
+Feature Engineering (9 physiological + temporal features incl. IOB)
 ↓
-LSTM Forecasting Model
+LSTM Forecasting Model (30-min glucose prediction)
 ↓
-SHAP Explainability Layer
+SHAP Explainability Layer (feature attribution)
 ↓
-Risk Assessment Engine
+Risk Assessment Engine (threshold + trend + IOB logic)
+↓
+Context Injection Layer (meal + activity signals)
 ↓
 FastAPI Backend
 ↓
@@ -85,82 +94,92 @@ Next.js Dashboard
 
 ## Machine Learning Pipeline
 
-### Dataset
+### Datasets
 
-- D1NAMO Type 1 Diabetes Dataset
+Primary: OhioT1DM Dataset (official access, Ohio State University)
+
+- 12 real-world T1D patients (2018 + 2020 releases)
+- Automated insulin pump logging — complete bolus records
+- ~11,000 CGM readings per patient (8 weeks continuous)
+
+Secondary: D1NAMO Dataset (Zenodo)
+
 - 9 real-world T1D patients
-- Continuous glucose monitoring records
-- Meal and insulin event data
+- Used for cross-dataset generalization analysis
+
+Personal: Medtronic MiniMed 780G CareLink Export
+
+- 8,291+ readings, May–June 2026
+- Used for qualitative inference and system demonstration
 
 ### Feature Engineering
 
-The model learns from engineered features including:
+The model learns from 9 engineered features:
 
-- Current glucose level
-- Short-term glucose deltas
-- Long-term glucose deltas
-- Rolling averages
-- Rolling volatility
-- Cyclical time-of-day encoding
+| Feature | Description |
+|---------|-------------|
+| glucose_norm | Glucose normalized to physiological bounds [40–400 mg/dL] |
+| delta_1 | Immediate rate of change (5 min) |
+| delta_3 | Short-term rate of change (15 min) |
+| delta_6 | Medium-term rate of change (30 min) |
+| rolling_mean_12 | 1-hour glucose baseline |
+| rolling_std_12 | Glucose volatility |
+| hour_sin / hour_cos | Cyclic time-of-day encoding (circadian patterns) |
+| iob_norm | Insulin-on-Board (triangular decay model, normalized) |
 
 ### Model
 
 - Framework: PyTorch
 - Architecture: Two-layer LSTM
 - Hidden Size: 64
+- Dropout: 0.2
 - Forecast Horizon: 30 minutes
 - Input Window: 24 readings (2 hours)
+- Parameters: 54,593
 
 ---
 
 ## Results
 
 | Metric | Value |
-|----------|----------|
+|--------|-------|
 | Forecast Horizon | 30 minutes |
-| Validation MAE | 18.5 mg/dL |
-| Hypoglycemia Direction Accuracy | 94.4% |
-| Patients Trained On | 9 |
-| Personal CGM Records | 8,291+ (Medtronic 780G,May-June 2026) |
+| Validation MAE | 20.57 mg/dL |
+| RMSE | 29.67 mg/dL |
+| Hypoglycemia Direction Accuracy | 97.1% |
+| Zone A+B (Clarke Error Grid) | 93.7% |
+| Zone E (Dangerous Errors) | 0.03% |
+| Patients Trained On | 12 (OhioT1DM, official) |
+| Personal CGM Records | 8,291+ (Medtronic 780G, May–June 2026) |
 
 ---
 
 ## Tech Stack
 
-### Machine Learning
-
-- PyTorch
-- NumPy
-- Pandas
-- SHAP
-
-### Backend
-
-- FastAPI
-- Pydantic
-
-### Frontend
-
-- Next.js
-- Tailwind CSS
-- Recharts
-
-### Infrastructure
-
-- Supabase
-- PostgreSQL
-
-### AI Services
-
-- Groq API
-- Llama 3.1 8B Instant (meal text parsing)
-- GPT-OSS 120B (meal photo recognition)
+Machine Learning: PyTorch · NumPy · Pandas · SHAP
+Backend: FastAPI · Pydantic
+Frontend: Next.js · Tailwind CSS · Recharts
+Infrastructure: Supabase · PostgreSQL
+AI Services: Groq API · Llama 3.1 8B Instant (meal text parsing) · Llama 4 Scout 17B (meal photo recognition)
 
 ---
 
 ## Project Structure
 
-text diabloom/ ├── src/ │   ├── dataset.py │   ├── model.py │   ├── explain.py │   └── database.py ├── data/ │   └── raw/ ├── models/ ├── frontend/ ├── notebooks/ └── main.py 
+diabloom/
+├── src/
+│   ├── dataset.py
+│   ├── model.py
+│   ├── explain.py
+│   └── database.py
+├── data/
+│   └── raw/
+├── models/
+├── notebooks/
+│   ├── iob_integration.ipynb
+│   └── ohio_training.ipynb
+├── results/
+└── main.py
 
 ---
 
@@ -168,15 +187,22 @@ text diabloom/ ├── src/ │   ├── dataset.py │   ├── model.p
 
 ### Backend
 
-bash python -m venv venv source venv/bin/activate  pip install -r requirements.txt  uvicorn main:app --reload 
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
 
-### Frontend
+### Frontend 
 
-bash cd frontend  npm install npm run dev 
+cd frontend
+npm install
+npm run dev
 
 ### Environment Variables
 
-env GROQ_API_KEY=... SUPABASE_URL=... SUPABASE_KEY=... 
+GROQ_API_KEY=...
+SUPABASE_URL=...
+SUPABASE_KEY=...
 
 ---
 
