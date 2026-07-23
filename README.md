@@ -45,7 +45,7 @@ SHAP values are used to identify the features that contributed most strongly to 
 
 ### Clinical Evaluation
 
-Clarke Error Grid Analysis: 93.7% Zone A+B (clinically safe predictions)
+Clarke Error Grid Analysis: 93.7% Zone A+B (clinically safe predictions), 
 Essentially zero Zone E (dangerous) predictions
 
 ### Personal Data Integration
@@ -74,6 +74,7 @@ The system uses a large language model to estimate:
 
 ## Architecture
 
+```text
 User CGM Data
         ↓
 Feature Engineering
@@ -94,7 +95,7 @@ Context Injection Layer
 FastAPI Backend
         ↓
 Next.js Dashboard
-
+```
 ---
 
 ## Machine Learning Pipeline
