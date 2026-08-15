@@ -376,7 +376,7 @@ Meal: {body.description}
 Return ONLY the JSON object. No explanation, no markdown, no backticks."""
 
         response = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="gpt-oss-20b",
             messages = [{"role": "user", "content": prompt}],
             temperature = 0.1,    # low temperature for consistent structured output
             max_tokens=300
